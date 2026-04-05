@@ -1,46 +1,34 @@
-# MLH PE Hackathon — Flask + Peewee + PostgreSQL Template
+# MLH PE Hackathon — URL Shortener API
 
-A minimal hackathon starter template. You get the scaffolding and database wiring — you build the models, routes, and CSV loading logic.
+A production-ready URL shortener service built with Flask, Peewee ORM, and PostgreSQL.
 
-**Stack:** Flask · Peewee ORM · PostgreSQL · uv
+**Stack:** Python 3.13 · Flask 3.1 · Peewee ORM · PostgreSQL 16 · uv
 
-## **Important**
+---
 
-You need to work with around the seed files that you can find in [MLH PE Hackathon](https://mlh-pe-hackathon.com) platform. This will help you build the schema for the database and have some data to do some testing and submit your project for judging. If you need help with this, reach out on Discord or on the Q&A tab on the platform.
+## Table of Contents
 
-## Prerequisites
+- [Quick Start](#quick-start)
+- [Architecture](#architecture)
+- [API Reference](#api-reference)
+- [Project Structure](#project-structure)
+- [Environment Variables](#environment-variables)
+- [Running Tests](#running-tests)
+- [Load Testing](#load-testing)
+- [Further Documentation](#further-documentation)
 
-- **uv** — a fast Python package manager that handles Python versions, virtual environments, and dependencies automatically.
-  Install it with:
-  ```bash
-  # macOS / Linux
-  curl -LsSf https://astral.sh/uv/install.sh | sh
-
-  # Windows (PowerShell)
-  powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-  ```
-  For other methods see the [uv installation docs](https://docs.astral.sh/uv/getting-started/installation/).
-- PostgreSQL running locally (you can use Docker or a local instance)
-
-## uv Basics
-
-`uv` manages your Python version, virtual environment, and dependencies automatically — no manual `python -m venv` needed.
-
-| Command | What it does |
-|---------|--------------|
-| `uv sync` | Install all dependencies (creates `.venv` automatically) |
-| `uv run <script>` | Run a script using the project's virtual environment |
-| `uv add <package>` | Add a new dependency |
-| `uv remove <package>` | Remove a dependency |
+---
 
 ## Quick Start
 
+**Prerequisites:** [uv](https://docs.astral.sh/uv/getting-started/installation/) and PostgreSQL running locally.
+
 ```bash
 # 1. Clone the repo
-git clone <repo-url> && cd mlh-pe-hackathon
+git clone <repo-url> && cd PE-Hackathon-2026
 
-# 2. Install dependencies
-uv sync
+# 2. Install dependencies (creates .venv automatically)
+uv sync --group dev
 
 # 3. Create the database
 createdb hackathon_db
@@ -48,145 +36,271 @@ createdb hackathon_db
 # 4. Configure environment
 cp .env.example .env   # edit if your DB credentials differ
 
-# 5. Run the server
+# 5. Load seed data
+uv run python scripts/load_pe_seed.py
+
+# 6. Start the server
 uv run run.py
 
-# 6. Verify
+# 7. Verify
 curl http://localhost:5000/health
 # → {"status":"ok"}
 ```
 
+---
+
+## Architecture
+
+```
+                         ┌─────────────────────────────────┐
+                         │          Client / Browser        │
+                         └────────────────┬────────────────┘
+                                          │ HTTP
+                                          ▼
+                         ┌─────────────────────────────────┐
+                         │         Flask Application        │
+                         │                                  │
+                         │  ┌──────────┐  ┌─────────────┐  │
+                         │  │ API      │  │  Redirect   │  │
+                         │  │ Blueprint│  │  Blueprint  │  │
+                         │  │ /api/*   │  │  /s/<code>  │  │
+                         │  └────┬─────┘  └──────┬──────┘  │
+                         │       │                │         │
+                         │  ┌────▼────────────────▼──────┐  │
+                         │  │       Peewee ORM           │  │
+                         │  │  User · Url · Event        │  │
+                         │  └────────────────┬───────────┘  │
+                         └───────────────────┼─────────────┘
+                                             │
+                                             ▼
+                         ┌─────────────────────────────────┐
+                         │         PostgreSQL 16            │
+                         │                                  │
+                         │  ┌────────┐ ┌──────┐ ┌───────┐  │
+                         │  │ users  │ │ urls │ │events │  │
+                         │  └────────┘ └──────┘ └───────┘  │
+                         └─────────────────────────────────┘
+```
+
+### Data Model
+
+```
+users (1) ──< urls (1) ──< events
+              urls has short_code (unique index) for fast redirect lookups
+```
+
+- **users** — account records (id, username, email, created_at)
+- **urls** — shortened links (short_code → original_url, is_active flag, owner)
+- **events** — click / interaction audit log (event_type, timestamp, details)
+
+---
+
+## API Reference
+
+Base URL: `http://localhost:5000`
+
+### Health
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/health` | Returns `{"status":"ok"}` — used by load balancers and CI smoke tests |
+| GET | `/` | Service info and endpoint map |
+
+**Example**
+```bash
+curl http://localhost:5000/health
+# {"status": "ok"}
+```
+
+---
+
+### Users
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/users` | List users |
+| GET | `/api/users/<id>` | Get a single user by ID |
+
+**Query Parameters — `GET /api/users`**
+
+| Param | Type | Default | Max | Description |
+|-------|------|---------|-----|-------------|
+| `limit` | int | 100 | 500 | Number of records to return |
+
+**Example**
+```bash
+curl "http://localhost:5000/api/users?limit=5"
+```
+```json
+[
+  {"id": 1, "username": "alice", "email": "alice@example.com", "created_at": "2024-01-01T00:00:00"},
+  ...
+]
+```
+
+**`GET /api/users/<id>`**
+```bash
+curl http://localhost:5000/api/users/1
+```
+Returns `404` with `{"error": "not_found"}` if the user does not exist.
+
+---
+
+### URLs
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/urls` | List shortened URLs |
+| GET | `/api/urls/<id>` | Get a single URL record by ID |
+
+**Query Parameters — `GET /api/urls`**
+
+| Param | Type | Default | Max | Description |
+|-------|------|---------|-----|-------------|
+| `limit` | int | 100 | 500 | Number of records to return |
+| `user_id` | int | — | — | Filter by owner user ID |
+
+**Example**
+```bash
+curl "http://localhost:5000/api/urls?user_id=1&limit=10"
+```
+```json
+[
+  {
+    "id": 42,
+    "user_id": 1,
+    "short_code": "abc123",
+    "original_url": "https://example.com/very/long/path",
+    "title": "Example Page",
+    "is_active": true,
+    "created_at": "2024-01-01T00:00:00",
+    "updated_at": "2024-01-01T00:00:00"
+  }
+]
+```
+
+---
+
+### Events
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/events` | List events |
+
+**Query Parameters — `GET /api/events`**
+
+| Param | Type | Default | Max | Description |
+|-------|------|---------|-----|-------------|
+| `limit` | int | 100 | 500 | Number of records to return |
+| `url_id` | int | — | — | Filter events for a specific URL |
+
+---
+
+### Redirect
+
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/s/<short_code>` | Redirect to the original URL |
+
+- Returns `302 Found` and redirects to `original_url` if the short code exists and `is_active = true`.
+- Returns `410 Gone` with `{"error": "gone", "reason": "inactive"}` if the URL is deactivated.
+- Returns `404` if the short code does not exist.
+
+**Example**
+```bash
+curl -L http://localhost:5000/s/abc123
+# Follows redirect to https://example.com/very/long/path
+```
+
+---
+
 ## Project Structure
 
 ```
-mlh-pe-hackathon/
+PE-Hackathon-2026/
 ├── app/
 │   ├── __init__.py          # App factory (create_app)
-│   ├── database.py          # DatabaseProxy, BaseModel, connection hooks
+│   ├── csv_parse.py         # parse_bool / parse_dt helpers for seed loading
+│   ├── database.py          # DatabaseProxy, BaseModel, per-request connection hooks
 │   ├── models/
-│   │   └── __init__.py      # Import your models here
+│   │   ├── __init__.py      # Re-exports User, Url, Event
+│   │   ├── user.py          # User model
+│   │   ├── url.py           # Url model (short_code index)
+│   │   └── event.py         # Event model
 │   └── routes/
-│       └── __init__.py      # register_routes() — add blueprints here
-├── .env.example             # DB connection template
-├── .gitignore               # Python + uv gitignore
-├── .python-version          # Pin Python version for uv
-├── pyproject.toml           # Project metadata + dependencies
+│       ├── __init__.py      # register_routes() — wires blueprints to app
+│       └── api.py           # api_bp (/api/*) and short_bp (/s/<code>)
+├── scripts/
+│   └── load_pe_seed.py      # Bulk-load PE/*.csv into Postgres (--reset flag)
+├── loadtests/
+│   ├── locustfile.py        # 50-VU load test scenario
+│   └── BASELINE.md          # Recorded performance results
+├── tests/
+│   ├── test_health.py       # Smoke test: /health
+│   └── test_csv_parse.py    # Unit tests for CSV parsing helpers
+├── docs/
+│   ├── DEPLOY.md            # Deployment guide and rollback procedures
+│   ├── TROUBLESHOOTING.md   # Known issues and fixes
+│   ├── RUNBOOKS.md          # Operational runbooks
+│   ├── DECISIONS.md         # Architecture decision log
+│   └── CAPACITY.md          # Capacity planning and limits
+├── .env.example             # Environment variable template
+├── .github/workflows/ci.yml # GitHub Actions CI (test on every push)
+├── pyproject.toml           # Project metadata and dependencies
 ├── run.py                   # Entry point: uv run run.py
-└── README.md
+└── README.md                # This file
 ```
 
-## How to Add a Model
+---
 
-1. Create a file in `app/models/`, e.g. `app/models/product.py`:
+## Environment Variables
 
-```python
-from peewee import CharField, DecimalField, IntegerField
+Copy `.env.example` to `.env` and adjust as needed.
 
-from app.database import BaseModel
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `DATABASE_NAME` | `hackathon_db` | Yes | PostgreSQL database name |
+| `DATABASE_HOST` | `localhost` | Yes | PostgreSQL host |
+| `DATABASE_PORT` | `5432` | Yes | PostgreSQL port |
+| `DATABASE_USER` | `postgres` | Yes | PostgreSQL user |
+| `DATABASE_PASSWORD` | `postgres` | Yes | PostgreSQL password |
+| `FLASK_DEBUG` | `false` | No | Enable Flask debug mode (never `true` in production) |
 
+---
 
-class Product(BaseModel):
-    name = CharField()
-    category = CharField()
-    price = DecimalField(decimal_places=2)
-    stock = IntegerField()
+## Running Tests
+
+```bash
+uv run pytest -v
 ```
 
-2. Import it in `app/models/__init__.py`:
+CI runs automatically on every push via GitHub Actions (see `.github/workflows/ci.yml`). It spins up a real PostgreSQL 16 container — no mocking.
 
-```python
-from app.models.product import Product
+---
+
+## Load Testing
+
+```bash
+# Start the server first
+uv run run.py
+
+# Run 50 concurrent users for 60 seconds
+uv run locust -f loadtests/locustfile.py \
+  --host http://127.0.0.1:5000 \
+  --users 50 --spawn-rate 50 --run-time 60s --headless
 ```
 
-3. Create the table (run once in a Python shell or a setup script):
+**Baseline results** (50 VUs, local dev server): ~85.6 RPS, p95 ~450ms, 0% error rate.
+See `loadtests/BASELINE.md` for full results and a template for recording future runs.
 
-```python
-from app.database import db
-from app.models.product import Product
+---
 
-db.create_tables([Product])
-```
+## Further Documentation
 
-## How to Add Routes
-
-1. Create a blueprint in `app/routes/`, e.g. `app/routes/products.py`:
-
-```python
-from flask import Blueprint, jsonify
-from playhouse.shortcuts import model_to_dict
-
-from app.models.product import Product
-
-products_bp = Blueprint("products", __name__)
-
-
-@products_bp.route("/products")
-def list_products():
-    products = Product.select()
-    return jsonify([model_to_dict(p) for p in products])
-```
-
-2. Register it in `app/routes/__init__.py`:
-
-```python
-def register_routes(app):
-    from app.routes.products import products_bp
-    app.register_blueprint(products_bp)
-```
-
-## How to Load CSV Data
-
-```python
-import csv
-from peewee import chunked
-from app.database import db
-from app.models.product import Product
-
-def load_csv(filepath):
-    with open(filepath, newline="") as f:
-        reader = csv.DictReader(f)
-        rows = list(reader)
-
-    with db.atomic():
-        for batch in chunked(rows, 100):
-            Product.insert_many(batch).execute()
-```
-
-## Useful Peewee Patterns
-
-```python
-from peewee import fn
-from playhouse.shortcuts import model_to_dict
-
-# Select all
-products = Product.select()
-
-# Filter
-cheap = Product.select().where(Product.price < 10)
-
-# Get by ID
-p = Product.get_by_id(1)
-
-# Create
-Product.create(name="Widget", category="Tools", price=9.99, stock=50)
-
-# Convert to dict (great for JSON responses)
-model_to_dict(p)
-
-# Aggregations
-avg_price = Product.select(fn.AVG(Product.price)).scalar()
-total = Product.select(fn.SUM(Product.stock)).scalar()
-
-# Group by
-from peewee import fn
-query = (Product
-         .select(Product.category, fn.COUNT(Product.id).alias("count"))
-         .group_by(Product.category))
-```
-
-## Tips
-
-- Use `model_to_dict` from `playhouse.shortcuts` to convert model instances to dictionaries for JSON responses.
-- Wrap bulk inserts in `db.atomic()` for transactional safety and performance.
-- The template uses `teardown_appcontext` for connection cleanup, so connections are closed even when requests fail.
-- Check `.env.example` for all available configuration options.
+| Doc | What's in it |
+|-----|--------------|
+| [`docs/DEPLOY.md`](docs/DEPLOY.md) | How to deploy, rollback, and promote to production |
+| [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) | Bugs hit during the hackathon and how they were fixed |
+| [`docs/RUNBOOKS.md`](docs/RUNBOOKS.md) | Step-by-step operational runbooks for common alerts |
+| [`docs/DECISIONS.md`](docs/DECISIONS.md) | Why Flask, Peewee, uv — the reasoning behind each choice |
+| [`docs/CAPACITY.md`](docs/CAPACITY.md) | How many users can we handle? Where are the limits? |

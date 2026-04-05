@@ -26,6 +26,9 @@ uv.lock
 # pytest
 .pytest_cache/
 
+# Locust CSV exports (optional: commit BASELINE_AUTO.md only)
+loadtests/results/
+
 # OS
 .DS_Store
 Thumbs.db

@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 from flask import Flask, jsonify
 
-from app.database import init_db
+from app.database import db, init_db
 from app.routes import register_routes
 
 
@@ -38,6 +38,10 @@ def create_app():
 
     @app.route("/health")
     def health():
+        try:
+            db.execute_sql("SELECT 1")
+        except Exception:
+            return jsonify(status="error", detail="database unreachable"), 503
         return jsonify(status="ok")
 
     return app
