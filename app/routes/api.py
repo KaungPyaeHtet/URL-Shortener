@@ -117,6 +117,21 @@ def _redirect_response_for_short_code(short_code: str, *, log_name: str):
         "redirect",
         extra={"short_code": code, "url_id": row.id, "destination": row.original_url, "via": log_name},
     )
+    # The Unseen Observer: record every successful redirect as an event.
+    # Use the URL owner's user_id since there is no authenticated user in a redirect.
+    try:
+        next_id = (Event.select(fn.MAX(Event.id)).scalar() or 0) + 1
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        Event.create(
+            id=next_id,
+            url_id=row.id,
+            user_id=row.user_id,
+            event_type="redirect",
+            timestamp=now,
+            details=json.dumps({"short_code": code, "destination": row.original_url}),
+        )
+    except Exception:
+        pass  # never let event logging break the redirect
     return redirect(row.original_url, code=302)
 
 
@@ -426,9 +441,11 @@ def create_event():
     except User.DoesNotExist:
         return jsonify(error="user not found"), 404
 
+    # The Fractured Vessel: details must be a JSON object, not a plain string or other type.
     details = data.get("details", {})
-    if not isinstance(details, str):
-        details = json.dumps(details)
+    if details is not None and not isinstance(details, dict):
+        return jsonify(error="details must be a JSON object"), 400
+    details = json.dumps(details or {})
 
     now = datetime.now(timezone.utc).replace(tzinfo=None)
     next_id = (Event.select(fn.MAX(Event.id)).scalar() or 0) + 1

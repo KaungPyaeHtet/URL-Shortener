@@ -426,17 +426,26 @@ def test_create_event_bad_url_id(client):
     assert rv.status_code == 400
 
 
-def test_create_event_details_as_string(client):
-    """details can be sent as a plain string."""
+def test_create_event_details_as_string_rejected(client):
+    """details must be a JSON object — a plain string is rejected (The Fractured Vessel)."""
     rv = client.post("/events", json={
         "event_type": "view",
         "url_id": TEST_URL_ID,
         "user_id": TEST_USER_ID,
         "details": '{"source": "email"}',
     })
-    assert rv.status_code == 201
-    from app.models import Event
-    Event.delete().where(Event.id == rv.get_json()["id"]).execute()
+    assert rv.status_code == 400
+
+
+def test_create_event_details_as_array_rejected(client):
+    """details must be a JSON object — an array is rejected."""
+    rv = client.post("/events", json={
+        "event_type": "view",
+        "url_id": TEST_URL_ID,
+        "user_id": TEST_USER_ID,
+        "details": ["a", "b"],
+    })
+    assert rv.status_code == 400
 
 
 def test_create_event_without_details(client):
@@ -489,3 +498,66 @@ def test_redirect_too_long_code_returns_404(client):
     """Short codes longer than 32 chars are rejected immediately (DoS guard)."""
     rv = client.get("/s/" + "x" * 33)
     assert rv.status_code == 404
+
+
+def test_redirect_creates_event(client):
+    """The Unseen Observer: every successful redirect auto-creates a 'redirect' event."""
+    from app.models import Event
+
+    before = Event.select().where(
+        Event.url_id == TEST_URL_ID,
+        Event.event_type == "redirect",
+    ).count()
+
+    client.get(f"/s/{TEST_SHORT_CODE}")
+
+    after = Event.select().where(
+        Event.url_id == TEST_URL_ID,
+        Event.event_type == "redirect",
+    ).count()
+    assert after == before + 1
+
+    # cleanup
+    Event.delete().where(
+        Event.url_id == TEST_URL_ID,
+        Event.event_type == "redirect",
+    ).execute()
+
+
+def test_redirect_via_urls_path_creates_event(client):
+    """The Unseen Observer: /urls/<code>/redirect also auto-creates a redirect event."""
+    from app.models import Event
+
+    before = Event.select().where(
+        Event.url_id == TEST_URL_ID,
+        Event.event_type == "redirect",
+    ).count()
+
+    client.get(f"/urls/{TEST_SHORT_CODE}/redirect")
+
+    after = Event.select().where(
+        Event.url_id == TEST_URL_ID,
+        Event.event_type == "redirect",
+    ).count()
+    assert after == before + 1
+
+    Event.delete().where(
+        Event.url_id == TEST_URL_ID,
+        Event.event_type == "redirect",
+    ).execute()
+
+
+def test_redirect_inactive_creates_no_event(client):
+    """The Slumbering Guide: inactive URL redirect (410) must NOT create an event."""
+    from app.models import Event
+
+    client.put(f"/urls/{TEST_URL_ID}", json={"is_active": False})
+    before = Event.select().where(Event.url_id == TEST_URL_ID).count()
+
+    rv = client.get(f"/s/{TEST_SHORT_CODE}")
+    assert rv.status_code == 410
+
+    after = Event.select().where(Event.url_id == TEST_URL_ID).count()
+    assert after == before, "Inactive redirect must not create an event"
+
+    client.put(f"/urls/{TEST_URL_ID}", json={"is_active": True})
