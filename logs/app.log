@@ -158,3 +158,17 @@
 {"asctime": "2026-04-05 16:40:35,855", "levelname": "WARNING", "name": "werkzeug", "message": " * Debugger is active!"}
 {"asctime": "2026-04-05 16:40:41,181", "levelname": "INFO", "name": "app", "message": "Starting mlh-pe-hackathon service"}
 {"asctime": "2026-04-05 16:40:41,242", "levelname": "WARNING", "name": "werkzeug", "message": " * Debugger is active!"}
+{"asctime": "2026-04-05 16:48:31,079", "levelname": "INFO", "name": "app", "message": "Starting mlh-pe-hackathon service"}
+{"asctime": "2026-04-05 16:48:31,131", "levelname": "INFO", "name": "app", "message": "request", "method": "GET", "path": "/health", "remote_addr": "127.0.0.1"}
+{"asctime": "2026-04-05 16:48:31,132", "levelname": "INFO", "name": "app", "message": "response", "method": "GET", "path": "/health", "status": 200}
+{"asctime": "2026-04-05 16:48:31,149", "levelname": "INFO", "name": "app", "message": "request", "method": "GET", "path": "/users", "remote_addr": "127.0.0.1"}
+{"asctime": "2026-04-05 16:48:31,152", "levelname": "INFO", "name": "app", "message": "response", "method": "GET", "path": "/users", "status": 200}
+{"asctime": "2026-04-05 16:48:31,167", "levelname": "INFO", "name": "app", "message": "request", "method": "GET", "path": "/does-not-exist", "remote_addr": "127.0.0.1"}
+{"asctime": "2026-04-05 16:48:31,167", "levelname": "WARNING", "name": "app", "message": "not_found", "path": "/does-not-exist"}
+{"asctime": "2026-04-05 16:48:31,167", "levelname": "INFO", "name": "app", "message": "response", "method": "GET", "path": "/does-not-exist", "status": 404}
+{"asctime": "2026-04-05 16:48:31,182", "levelname": "INFO", "name": "app", "message": "request", "method": "GET", "path": "/prom", "remote_addr": "127.0.0.1"}
+{"asctime": "2026-04-05 16:48:31,183", "levelname": "INFO", "name": "app", "message": "response", "method": "GET", "path": "/prom", "status": 200}
+{"asctime": "2026-04-05 16:59:39,055", "levelname": "INFO", "name": "app", "message": "Starting mlh-pe-hackathon service"}
+{"asctime": "2026-04-05 16:59:39,119", "levelname": "WARNING", "name": "werkzeug", "message": " * Debugger is active!"}
+{"asctime": "2026-04-05 17:01:26,451", "levelname": "INFO", "name": "app", "message": "Starting mlh-pe-hackathon service"}
+{"asctime": "2026-04-05 17:01:26,536", "levelname": "WARNING", "name": "werkzeug", "message": " * Debugger is active!"}
