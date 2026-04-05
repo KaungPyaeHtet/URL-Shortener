@@ -16,6 +16,26 @@ def create_app():
 
     register_routes(app)
 
+    @app.errorhandler(404)
+    def not_found(_e):
+        return jsonify(error="not_found"), 404
+
+    @app.route("/")
+    def index():
+        return jsonify(
+            service="mlh-pe-hackathon",
+            seed="PE/*.csv — load with: uv run python scripts/load_pe_seed.py",
+            endpoints={
+                "health": "/health",
+                "users": "/api/users",
+                "user": "/api/users/<id>",
+                "urls": "/api/urls",
+                "url": "/api/urls/<id>",
+                "events": "/api/events",
+                "redirect": "/s/<short_code>",
+            },
+        )
+
     @app.route("/health")
     def health():
         return jsonify(status="ok")

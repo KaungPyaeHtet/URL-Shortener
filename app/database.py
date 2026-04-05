@@ -10,14 +10,27 @@ class BaseModel(Model):
         database = db
 
 
-def init_db(app):
-    database = PostgresqlDatabase(
+def _postgres_from_env() -> PostgresqlDatabase:
+    return PostgresqlDatabase(
         os.environ.get("DATABASE_NAME", "hackathon_db"),
         host=os.environ.get("DATABASE_HOST", "localhost"),
         port=int(os.environ.get("DATABASE_PORT", 5432)),
         user=os.environ.get("DATABASE_USER", "postgres"),
         password=os.environ.get("DATABASE_PASSWORD", "postgres"),
     )
+
+
+def connect_db_cli():
+    """Initialize and open DB for scripts (after load_dotenv())."""
+    database = _postgres_from_env()
+    db.initialize(database)
+    if db.is_closed():
+        db.connect(reuse_if_open=True)
+    return db
+
+
+def init_db(app):
+    database = _postgres_from_env()
     db.initialize(database)
 
     @app.before_request
