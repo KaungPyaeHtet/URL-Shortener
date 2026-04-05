@@ -7,6 +7,7 @@ from flask import Flask, jsonify, request
 
 from app.database import db, ensure_tables, init_db
 from app.logging_config import LOG_FILE, setup_logging
+from app.prom_metrics import init_prom_metrics
 from app.routes import register_routes
 
 log = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ def create_app():
     ensure_tables()
 
     register_routes(app)
+    init_prom_metrics(app)
 
     # ── Request logging ────────────────────────────────────────────────────────
 
@@ -75,6 +77,7 @@ def create_app():
             endpoints={
                 "health": "GET /health",
                 "metrics": "GET /metrics",
+                "prom": "GET /prom",
                 "logs": "GET /logs",
                 "users": "GET /users",
                 "users_bulk": "POST /users/bulk",

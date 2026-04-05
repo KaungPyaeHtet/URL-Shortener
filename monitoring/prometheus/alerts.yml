@@ -1,0 +1,78 @@
+groups:
+  - name: app_alerts
+    rules:
+
+      # ── Service Down ──────────────────────────────────────────────────────────
+      # Fires if Prometheus cannot scrape an app instance for 1 minute.
+      - alert: ServiceDown
+        expr: up{job="app"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "App instance {{ $labels.instance }} is down"
+          description: >
+            Prometheus cannot reach {{ $labels.instance }} at /prom.
+            The instance has been unreachable for more than 1 minute.
+            Check: docker compose logs app1 app2
+
+      # ── High 5xx Error Rate ────────────────────────────────────────────────────
+      # Fires if >5% of requests in the last 5 min return 5xx.
+      - alert: HighErrorRate
+        expr: >
+          sum(rate(http_requests_total{status=~"5.."}[5m])) by (instance)
+          /
+          sum(rate(http_requests_total[5m])) by (instance)
+          > 0.05
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High 5xx error rate on {{ $labels.instance }}"
+          description: >
+            {{ $labels.instance }} has a 5xx error rate above 5% for the last 2 minutes.
+            Current value: {{ $value | humanizePercentage }}.
+            Check: GET /logs?lines=100
+
+      # ── High Request Latency ──────────────────────────────────────────────────
+      # Fires if P95 latency exceeds 1 second for 5 minutes.
+      - alert: HighLatencyP95
+        expr: >
+          histogram_quantile(
+            0.95,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le, instance)
+          ) > 1.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P95 latency above 1s on {{ $labels.instance }}"
+          description: >
+            P95 response time on {{ $labels.instance }} has exceeded 1 second for 5 minutes.
+            Current value: {{ $value | humanizeDuration }}.
+
+      # ── High CPU ──────────────────────────────────────────────────────────────
+      # Fires if CPU > 85% for 2 minutes.
+      - alert: HighCPU
+        expr: system_cpu_percent > 85
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU on {{ $labels.instance }}"
+          description: >
+            CPU usage on {{ $labels.instance }} has been above 85% for 2 minutes.
+            Current value: {{ $value }}%.
+
+      # ── High Memory ───────────────────────────────────────────────────────────
+      # Fires if RAM usage > 90% for 2 minutes.
+      - alert: HighMemory
+        expr: system_memory_percent > 90
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory on {{ $labels.instance }}"
+          description: >
+            Memory usage on {{ $labels.instance }} has been above 90% for 2 minutes.
+            Current value: {{ $value }}%.

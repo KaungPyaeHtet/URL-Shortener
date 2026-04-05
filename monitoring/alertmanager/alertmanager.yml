@@ -1,0 +1,40 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  group_by: ["alertname", "instance"]
+  group_wait: 30s        # wait 30s before sending first notification (batches)
+  group_interval: 5m     # how long to wait before re-sending a resolved/new group
+  repeat_interval: 1h    # resend a firing alert every hour if still active
+  receiver: "discord"
+
+  routes:
+    # Critical alerts (ServiceDown) fire immediately, no batching wait
+    - matchers:
+        - severity = "critical"
+      group_wait: 10s
+      repeat_interval: 15m
+      receiver: "discord"
+
+receivers:
+  - name: "discord"
+    discord_configs:
+      - webhook_url: "${DISCORD_WEBHOOK_URL}"
+        title: >-
+          {{ if eq .Status "firing" }}🔴{{ else }}✅{{ end }}
+          [{{ .Status | toUpper }}] {{ .CommonLabels.alertname }}
+        message: >-
+          {{ range .Alerts }}
+          **Instance:** {{ .Labels.instance }}
+          **Severity:** {{ .Labels.severity }}
+          **Summary:** {{ .Annotations.summary }}
+          **Detail:** {{ .Annotations.description }}
+          {{ end }}
+
+inhibit_rules:
+  # Suppress warnings when a critical alert is already firing for the same instance
+  - source_matchers:
+      - severity = "critical"
+    target_matchers:
+      - severity = "warning"
+    equal: ["instance"]
